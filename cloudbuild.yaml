@@ -1,0 +1,50 @@
+steps:
+  # Build React application
+  - id: "Build React Application"
+    name: node:18-slim
+    entrypoint: npm
+    args: ["run", "build"]
+  # Build Docker Image
+  - id: "Build Docker Image"
+    name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-t", "${_ARTIFACT_REGISTRY_DOMAIN}/$PROJECT_ID/${_CLOUDRUN_ARTIFACTS_REPO}/${_CLOUD_RUN_SERVICE_NAME}:$COMMIT_SHA", "."]
+  # Push Docker Image to Artifact Registry
+  - id: "Push Image to Artifact Registry"
+    name: "gcr.io/cloud-builders/docker"
+    args: ["push", "${_ARTIFACT_REGISTRY_DOMAIN}/$PROJECT_ID/${_CLOUDRUN_ARTIFACTS_REPO}/${_CLOUD_RUN_SERVICE_NAME}:$COMMIT_SHA"]
+  # Deploy to cloud run
+  - id: "Deploy Cloud Run Service"
+    name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_CLOUD_RUN_SERVICE_NAME}"
+      - "--image"
+      - "${_ARTIFACT_REGISTRY_DOMAIN}/$PROJECT_ID/${_CLOUDRUN_ARTIFACTS_REPO}/${_CLOUD_RUN_SERVICE_NAME}:$COMMIT_SHA"
+      - "--region"
+      - "${_CLOUD_RUN_REGION}"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--service-account"
+      - "${_CLOUD_RUN_IDENTITY}"
+      - "--min-instances"
+      - "0"
+      - "--max-instances"
+      - "2"
+  # Update Cloud Run IAM Policy for inbound traffic
+  - id: "Update Cloud Run IAM Policy"
+    name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "services"
+      - "add-iam-policy-binding"
+      - ${_CLOUD_RUN_SERVICE_NAME}
+      - --member=allUsers
+      - --role=roles/run.invoker
+      - "--region"
+      - "us-west3"
+images:
+  - "${_ARTIFACT_REGISTRY_DOMAIN}/$PROJECT_ID/${_CLOUDRUN_ARTIFACTS_REPO}/${_CLOUD_RUN_SERVICE_NAME}:$COMMIT_SHA"
+options:
+  logging: CLOUD_LOGGING_ONLY
